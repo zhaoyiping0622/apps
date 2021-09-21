@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,9 +31,13 @@ type Config struct {
 		Server string `json:"server"`
 		Port   int    `json:"port"`
 	} `json:"smtp"`
-	Timeout       int      `json:"timeout"`
-	DataDirectory string   `json:"DataDirectory"`
-	Keys          []string `json:"keys"`
+	Timeout          int      `json:"timeout"`
+	DataDirectory    string   `json:"DataDirectory"`
+	Keys             []string `json:"keys"`
+	AttachmentFilter []struct {
+		String string `json:"regex"`
+		regex  *regexp.Regexp
+	} `json:"attachmentFilter"`
 }
 
 var config Config
@@ -52,19 +57,22 @@ func readConfig() {
 				log.Panicln(err)
 			}
 		}
+		for i := range config.AttachmentFilter {
+			config.AttachmentFilter[i].regex = regexp.MustCompile(config.AttachmentFilter[i].String)
+		}
 	}
 }
 
-func sendReply(to string, subject string, attachmentNames []string, date time.Time) {
+func sendReply(to string, subject string, message string) {
 	d := gomail.NewDialer(config.Smtp.Server, config.Smtp.Port, config.Username, config.Password)
 	d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	m := gomail.NewMessage()
 	m.SetHeader("From", config.Username)
 	m.SetHeader("To", to)
 	m.SetHeader("Subject", "回执："+subject)
-	body := fmt.Sprintf("发送时间为\"%v\"标题为\"%v\"的邮件已收到，收取到的附件如下：%v\n 此邮件由代码生成，请勿回复，谢谢。", date, subject, attachmentNames)
-	m.SetBody("text/plain", body)
-	log.Printf("from %v reply to %v, content %v", config.Username, to, body)
+	//body := fmt.Sprintf("发送时间为\"%v\"标题为\"%v\"的邮件已收到，收取到的附件如下：%v\n 此邮件由代码生成，请勿回复，谢谢。", date, subject, attachmentNames)
+	m.SetBody("text/plain", message)
+	log.Printf("from %v reply to %v, content %v", config.Username, to, message)
 	if err := d.DialAndSend(m); err != nil {
 		log.Println(err)
 	}
@@ -150,6 +158,7 @@ func processMail(msg *imap.Message, section *imap.BodySectionName) {
 	}
 	log.Printf("get message from %v date %v subject %v\n", from, date, subject)
 	attachmentNames := make([]string, 0)
+	successAttachmentNames := make([]string, 0)
 	for {
 		p, err := bodyReader.NextPart()
 		if err == io.EOF {
@@ -170,12 +179,19 @@ func processMail(msg *imap.Message, section *imap.BodySectionName) {
 			}
 			log.Printf("get attachment %v\n", filename)
 			attachmentNames = append(attachmentNames, filename)
+			for _, filter := range config.AttachmentFilter {
+				if filter.regex.MatchString(filename) {
+					successAttachmentNames = append(successAttachmentNames, filename)
+					break
+				}
+			}
 			filename = saveFile(p.Body, path.Join(dirname, filename))
 			log.Printf("save to file %v", filename)
 		}
 	}
 	if reply {
-		sendReply(from[0].Address, subject, attachmentNames, date)
+		message := fmt.Sprintf("发送时间为\"%v\"标题为\"%v\"的邮件已收到，收取到的附件如下：%v，其中，合法的附件名有%v个，分别为%v，如果有不合法的附件名，请尝试修改名称后重发。\n此邮件由代码生成，请勿回复，谢谢。", date, subject, attachmentNames, len(successAttachmentNames), successAttachmentNames)
+		sendReply(from[0].Address, subject, message)
 	}
 }
 
