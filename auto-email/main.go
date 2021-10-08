@@ -31,13 +31,13 @@ type Config struct {
 		Server string `json:"server"`
 		Port   int    `json:"port"`
 	} `json:"smtp"`
-	Timeout          int      `json:"timeout"`
-	DataDirectory    string   `json:"DataDirectory"`
-	Keys             []string `json:"keys"`
-	AttachmentFilter []struct {
-		String string `json:"regex"`
-		regex  *regexp.Regexp
-	} `json:"attachmentFilter"`
+	Timeout       int      `json:"timeout"`
+	DataDirectory string   `json:"DataDirectory"`
+	Keys          []string `json:"keys"`
+  AttachmentFilter []struct {
+    String string `json:"regex"`
+    regex *regexp.Regexp
+  } `json:"attachmentFilter"`
 }
 
 var config Config
@@ -57,9 +57,9 @@ func readConfig() {
 				log.Panicln(err)
 			}
 		}
-		for i := range config.AttachmentFilter {
-			config.AttachmentFilter[i].regex = regexp.MustCompile(config.AttachmentFilter[i].String)
-		}
+    for i:= range config.AttachmentFilter {
+      config.AttachmentFilter[i].regex=regexp.MustCompile(config.AttachmentFilter[i].String)
+    }
 	}
 }
 
@@ -158,7 +158,7 @@ func processMail(msg *imap.Message, section *imap.BodySectionName) {
 	}
 	log.Printf("get message from %v date %v subject %v\n", from, date, subject)
 	attachmentNames := make([]string, 0)
-	successAttachmentNames := make([]string, 0)
+  successAttachmentNames := make([]string,0)
 	for {
 		p, err := bodyReader.NextPart()
 		if err == io.EOF {
@@ -179,18 +179,18 @@ func processMail(msg *imap.Message, section *imap.BodySectionName) {
 			}
 			log.Printf("get attachment %v\n", filename)
 			attachmentNames = append(attachmentNames, filename)
-			for _, filter := range config.AttachmentFilter {
-				if filter.regex.MatchString(filename) {
-					successAttachmentNames = append(successAttachmentNames, filename)
-					break
-				}
-			}
+      for _,filter:=range config.AttachmentFilter {
+        if filter.regex.MatchString(filename) {
+          successAttachmentNames = append(successAttachmentNames, filename)
+          break
+        }
+      }
 			filename = saveFile(p.Body, path.Join(dirname, filename))
 			log.Printf("save to file %v", filename)
 		}
 	}
 	if reply {
-		message := fmt.Sprintf("发送时间为\"%v\"标题为\"%v\"的邮件已收到，收取到的附件如下：%v，其中，合法的附件名有%v个，分别为%v，如果有不合法的附件名，请尝试修改名称后重发。\n此邮件由代码生成，请勿回复，谢谢。", date, subject, attachmentNames, len(successAttachmentNames), successAttachmentNames)
+    message:= fmt.Sprintf("发送时间为\"%v\"标题为\"%v\"的邮件已收到，收取到的附件如下：%v，其中，合法的附件名有%v个，分别为%v，如果有不合法的附件名，请尝试修改名称后重发。\n此邮件由代码生成，请勿回复，谢谢。", date, subject, attachmentNames, len(successAttachmentNames), successAttachmentNames)
 		sendReply(from[0].Address, subject, message)
 	}
 }
@@ -232,7 +232,7 @@ func getValidSeqNumber(cli *client.Client) []uint32 {
 		}
 		valid := false
 		for _, key := range config.Keys {
-			if strings.HasPrefix(msg.Envelope.Subject, key) {
+			if strings.HasPrefix(strings.Trim(msg.Envelope.Subject," "), key) {
 				valid = true
 				break
 			}
